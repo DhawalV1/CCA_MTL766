@@ -175,29 +175,57 @@ if __name__ == "__main__":
 
     print(f"Starting Functional CCA for N={N_regions} regions using {basis_type} basis.")
 
-    # --- Simulate N realizations for Y(t) and X(t) ---
-    all_time_points_y = []
+    # --- Load Real GDP and FDI Data ---
+
+
+    # Load the merged dataset
+    data = pd.read_csv("merged_gdp_fdi_data.csv")
+
+    # Define region codes (same order as N_regions)
+    region_labels = ["EUU", "LMY", "WLD", "BGR", "POL", "RUS", "UGA", "USA"]
+
+    # Define the range of years of interest
+    years = np.arange(1993, 2012)  # 1993–2011 inclusive
+
+    # --- Prepare lists of discrete observations ---
+    all_time_points_y = []  # For GDP
     all_discrete_data_y = []
-    all_time_points_x = []
+    all_time_points_x = []  # For FDI
     all_discrete_data_x = []
 
-    for i in range(N_regions):
-        time_points = np.sort(np.linspace(T_min_global, T_max_global, num_time_points_per_series) + np.random.normal(0, 0.1, num_time_points_per_series))
-        
-        true_y_i = (2 + 0.5*i) * np.sin(2 * np.pi * (time_points - T_min_global) / T_period_global) + \
-                   (1.5 - 0.1*i) * np.cos(4 * np.pi * (time_points - T_min_global) / T_period_global) + \
-                   (3 + 0.2*i)
-        discrete_data_y_i = true_y_i + np.random.normal(0, 0.5, num_time_points_per_series)
+    for code in region_labels:
+        # Filter data for this country
+        row = data[data["Country Code"] == code]
 
-        true_x_i = (3 - 0.3*i) * np.cos(2 * np.pi * (time_points - T_min_global) / T_period_global) - \
-                   (1 + 0.2*i) * np.sin(6 * np.pi * (time_points - T_min_global) / T_period_global) + \
-                   (5 - 0.1*i)
-        discrete_data_x_i = true_x_i + np.random.normal(0, 0.7, num_time_points_per_series)
+        if row.empty:
+            print(f"Warning: No data for {code}")
+            continue
 
-        all_time_points_y.append(time_points)
-        all_discrete_data_y.append(discrete_data_y_i)
-        all_time_points_x.append(time_points)
-        all_discrete_data_x.append(discrete_data_x_i)
+        # Extract GDP and FDI columns for selected years
+        gdp_cols = [f"GDP_{year}" for year in years]
+        fdi_cols = [f"FDI_{year}" for year in years]
+
+        gdp_values = row[gdp_cols].values.flatten()
+        fdi_values = row[fdi_cols].values.flatten()
+
+        # Handle missing data by interpolation and filling
+        gdp_values = pd.Series(gdp_values).interpolate(limit_direction="both").fillna(method="bfill").fillna(method="ffill").values
+        fdi_values = pd.Series(fdi_values).interpolate(limit_direction="both").fillna(method="bfill").fillna(method="ffill").values
+
+        # Append to the lists
+        all_time_points_y.append(years)
+        all_discrete_data_y.append(gdp_values)
+        all_time_points_x.append(years)
+        all_discrete_data_x.append(fdi_values)
+
+    # Quick sanity check
+    print(f"Loaded data for {len(all_discrete_data_y)} regions.")
+    print(f"Example GDP data for {region_labels[0]}:", all_discrete_data_y[0][:5])
+    print(f"Example FDI data for {region_labels[0]}:", all_discrete_data_x[0][:5])
+    
+
+
+
 
     # --- Determine Optimal K for Y and X ---
     optimal_K_y, _, _, _, num_coeffs_y_opt = select_optimal_K(
